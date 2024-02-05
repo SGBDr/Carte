@@ -5,11 +5,17 @@ import { encode as base64Encode } from 'base-64';
 import React, { useState, useEffect } from 'react';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import axios from 'axios';
+import Sensor from './Sensor.js'
 
 export default function Map() {
-    const [region, setRegion] = useState();
-    const [departure, setDeparture] = useState();
-    const [destination, setDestination] = useState();
+    const [region, setRegion] = useState({
+      latitude: 48.858053,
+      longitude: 2.2944991,
+      latitudeDelta: 0.5,
+      longitudeDelta: 0.5,
+    });
+    const [departure, setDeparture] = useState({});
+    const [destination, setDestination] = useState({});
     const [routeCoordinates, setRouteCoordinates] = useState([]);
     const [dep, setDep] = useState("")
     const [des, setDes] = useState("")
@@ -25,15 +31,26 @@ export default function Map() {
               Authorization: authHeader,
             },
           };
+          
+          // original api
+          /*const response = await axios.get(
+            `http://router.project-osrm.org/route/v1/driving/${departure.longitude},${departure.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=geojson`
+          );*/
 
+          // capgemini server api
           const response = await axios.get(
             `http://apifm.grisel.eu/route/v1/driving/${departure.longitude},${departure.latitude};${destination.longitude},${destination.latitude}?steps=true&geometries=geojson&exclude=motorway&overview=full&alternatives=true&annotations=nodes`,
             config
           );
-  
-          const coordinates = response.data.routes[0].geometry.coordinates.map(x => {return {latitude: x[1], longitude: x[0]}});
+
+          roads = []
+          for(let r of response.data.routes) {
+            const coordinates = r.geometry.coordinates.map(x => {return {latitude: x[1], longitude: x[0]}});
+            roads.push(coordinates)
+          }
+          console.log(roads.length)
           
-          setRouteCoordinates(coordinates);
+          setRouteCoordinates(roads);
         } catch (error) {
           console.error('Error fetching route:', error);
         }
@@ -47,10 +64,12 @@ export default function Map() {
     
           if (response.data && response.data.length > 0) {
             const firstResult = response.data[0].display_name;
-            coord = {latitude: response.data[0].lat, longitude: response.data[0].lon}
-
+            coord = {latitude: parseFloat(response.data[0].lat), longitude: parseFloat(response.data[0].lon)}
+            coordd = {latitude: parseFloat(response.data[0].lat), longitude: parseFloat(response.data[0].lon), latitudeDelta: 0.05, longitudeDelta: 0.05,}
+            
             setDep(firstResult);
             setDeparture(coord)
+            setRegion(coordd)
           }
         } catch (error) {
           console.error('Error searching departure address:', error);
@@ -65,7 +84,7 @@ export default function Map() {
     
           if (response.data && response.data.length > 0) {
             const firstResult = response.data[0].display_name;
-            coord = {latitude: response.data[0].lat, longitude: response.data[0].lon}
+            coord = {latitude: parseFloat(response.data[0].lat), longitude: parseFloat(response.data[0].lon)}
 
             setDes(firstResult);
             setDestination(coord)
@@ -94,15 +113,23 @@ export default function Map() {
             onRegionChangeComplete={(newRegion) => setRegion(newRegion)}
         >
 
-        <Marker coordinate={departure} pinColor="green"  title="Departure" />
-        <Marker coordinate={destination} pinColor="blue" title="Destination" />
+        { departure.latitude && departure.longitude && ( 
+          <Marker coordinate={departure} pinColor="green"  title="Departure" />
+        )}
+        { destination.latitude && destination.longitude && (
+          <Marker coordinate={destination} pinColor="blue" title="Destination" />
+        )}
 
         {routeCoordinates.length > 0 && (
-          <Polyline
-            coordinates={routeCoordinates}
-            strokeWidth={3}
-            strokeColor="black"
-          />
+          routeCoordinates.map(
+            road => (
+              <Polyline
+              coordinates={road}
+              strokeWidth={3}
+              strokeColor="red"
+            />
+            )
+          )
         )}
       </MapView>
     </View>
@@ -123,7 +150,6 @@ const styles = StyleSheet.create({
     container: {
       flex: 1,
       padding: 0,
-      marginTop: 40,
       backgroundColor: '#fff',
       alignItems: 'center',
       justifyContent: 'top',
